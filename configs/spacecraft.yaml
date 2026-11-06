@@ -1,0 +1,23 @@
+# Spacecraft & reaction wheel configuration (WP 3100)
+#
+# PLACEHOLDER VALUES (generic small satellite).
+# Replace with the Bevo2-Sat configuration from the Basilisk example scenarioAttitudeConstraintViolation.
+
+hub:
+  mass: 4.0                                   # [kg]
+  inertia: [[0.1672, 0.0,    0.0    ],        # [kg m^2] body inertia about CoM (without wheels)
+            [0.0,    0.1259, 0.0    ],
+            [0.0,    0.0,    0.06121]]
+
+reaction_wheels:
+  model: "BalancedWheels"                     # Basilisk RW model: BalancedWheels | JitterSimple | JitterFullyCoupled
+  Js: 1.722e-5                                # [kg m^2] wheel spin-axis inertia
+  u_max: 7.0e-4                               # [N m] max motor torque
+  omega_max_rpm: 6000.0                       # [rpm] max wheel speed (~628.3 rad/s)
+  # Spin axes in body frame (unit vectors), tetrahedral 4-wheel layout. Remove/add rows to change the layout.
+  spin_axes_B:
+    - [ 0.0,     0.0,    -1.0   ]
+    - [ 0.0,    -0.9428,  0.3333]
+    - [ 0.8165,  0.4714,  0.3333]
+    - [-0.8165,  0.4714,  0.3333]
+  initial_speed_rpm: 0.0                      # [rpm] initial wheel speed for all wheels

@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# Training / evaluation outputs (generated, can be large)
+outputs/
+models/
+tensorboard/
+monitor_logs/
+evaluation_data/
+videos/
+*.zip
+*.pkl
+
+# Basilisk scratch output
+_VizFiles/
+*.bin
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Course material: copyrighted books/papers and internal supervisor files - never publish
+literature_review/
+*.pdf
+*.pptx
+*.docx
+
+# Local tool settings
+.claude/

@@ -1,0 +1,15 @@
+# Soft Actor-Critic hyperparameters (WP 4200) - passed to stable_baselines3.SAC
+algorithm: SAC
+policy: MlpPolicy
+hyperparameters:
+  learning_rate: 3.0e-4
+  buffer_size: 1000000
+  learning_starts: 10000
+  batch_size: 256
+  tau: 0.005
+  gamma: 0.99
+  train_freq: 1
+  gradient_steps: 1
+  ent_coef: auto
+  policy_kwargs:
+    net_arch: [256, 256]

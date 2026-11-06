@@ -1,0 +1,38 @@
+# Uncertainty & disturbance models (WP 3300)
+# Each block is sampled once per episode (domain randomization) unless noted otherwise.
+# A curriculum phase scales all magnitudes via `uncertainty_scale` (0 = nominal model, 1 = values below).
+#
+# Project focus (supervisor): robustness against
+#   - moment of inertia uncertainty of +/- 10-30 % on the principal MOI
+#   - external disturbance torques (constant, periodic)
+#   - scenario: large-angle rest-to-rest maneuver
+
+inertia:
+  enabled: true
+  relative_max: 0.30            # principal MOI: J_ii * (1 + U(-max, max)); scale 0.33 -> +/-10 %, 1.0 -> +/-30 %
+  products_of_inertia_std: 0.0  # [kg m^2] optional off-diagonal perturbation
+  # Samples that are not physically valid (positive definite + triangle inequality) are redrawn.
+
+external_torque:
+  enabled: true
+  constant_max: 1.0e-5          # [N m] constant torque, magnitude U(0, max), random direction
+  periodic_max: 1.0e-5          # [N m] periodic torque amplitude U(0, max), random direction
+  period_range_s: [50.0, 300.0] # [s] period U(min, max), random phase (shorter than an episode so it varies)
+  random_std: 0.0               # [N m] optional white noise (per step)
+  # TODO: rescale magnitudes to the Bevo2-Sat wheels (u_max) once configs/spacecraft.yaml is updated
+
+# --- Not in the project focus: disabled by default, enable for extended robustness tests ---
+
+rw_misalignment:
+  enabled: false
+  max_angle_deg: 0.5            # random tilt of each spin axis
+
+rw_torque:
+  enabled: false
+  scale_factor_std: 0.02        # actual torque = u_cmd * (1 + N(0, std))
+  noise_std: 1.0e-6             # [N m] additive torque noise (per step)
+
+sensor_noise:
+  enabled: false
+  attitude_std_deg: 0.01        # attitude knowledge error (star tracker)
+  rate_std: 1.0e-5              # [rad/s] gyro noise

@@ -1,0 +1,35 @@
+# Curriculum learning phases (WP 4100)
+# Phases are trained in order; each phase continues from the model of the previous one.
+#   initial_angle_deg:   range of the initial principal attitude error
+#   initial_rate_deg_s:  range of the initial angular rate magnitude ([0, 0] = rest-to-rest)
+#   uncertainty_scale:   multiplier for configs/uncertainty.yaml (0 = nominal, 1 = full: +/-30 % MOI)
+
+name: default
+phases:
+  - name: "1 - small slews, nominal model"
+    timesteps: 300000
+    initial_angle_deg: [0.0, 30.0]
+    initial_rate_deg_s: [0.0, 0.0]
+    max_steps: 1500
+    uncertainty_scale: 0.0
+
+  - name: "2 - large-angle slews, nominal model"
+    timesteps: 700000
+    initial_angle_deg: [0.0, 180.0]
+    initial_rate_deg_s: [0.0, 0.0]
+    max_steps: 3000
+    uncertainty_scale: 0.0
+
+  - name: "3 - large-angle slews, +/-10 % MOI, disturbances"
+    timesteps: 500000
+    initial_angle_deg: [0.0, 180.0]
+    initial_rate_deg_s: [0.0, 0.0]
+    max_steps: 3000
+    uncertainty_scale: 0.333
+
+  - name: "4 - large-angle slews, +/-30 % MOI, full disturbances"
+    timesteps: 1000000
+    initial_angle_deg: [0.0, 180.0]
+    initial_rate_deg_s: [0.0, 0.0]
+    max_steps: 3000
+    uncertainty_scale: 1.0

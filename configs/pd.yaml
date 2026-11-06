@@ -1,0 +1,5 @@
+# PD controller baseline (WP 3400) - MRP feedback L = -K sigma_BR - P omega_BR_B
+# Initial gains for ~critical damping with the placeholder inertia (tune in WP 3400):
+#   small angles: sigma ~ theta/4  ->  omega_n = sqrt(K / (4 J)),  zeta = P / (2 J omega_n)
+K: 1.0e-3        # [N m] proportional gain
+P: 1.3e-2        # [N m s] derivative gain

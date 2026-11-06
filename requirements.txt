@@ -1,0 +1,35 @@
+# ---------------------------------------------------------------------------
+# RL-based Spacecraft Reorientation Control - Python dependencies
+# Tested with Python 3.11 (Basilisk wheels are available for 3.9 - 3.13)
+#
+# Install:
+#   python -m venv .venv
+#   .venv\Scripts\activate            (Windows)   |   source .venv/bin/activate  (Linux/macOS)
+#   pip install -r requirements.txt
+#   pip install -e .                  (makes the `rl_reorientation` package importable)
+# ---------------------------------------------------------------------------
+
+# --- Spacecraft simulation (WP 3000) ---------------------------------------
+bsk>=2.12                 # Basilisk astrodynamics framework (AVS Lab), import as `Basilisk`
+numpy>=1.24
+scipy>=1.10
+
+# --- Reinforcement learning (WP 4000) --------------------------------------
+gymnasium>=1.0
+stable-baselines3>=2.4    # SAC, PPO
+tensorboard>=2.15         # training logs
+tqdm                      # progress bar for model.learn(progress_bar=True)
+rich                      # progress bar for model.learn(progress_bar=True)
+
+# PyTorch is pulled in by stable-baselines3 (CPU build).
+# For GPU training, install the CUDA build BEFORE the line above, e.g.:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu128
+# Note: SAC/PPO with small MLP policies often run as fast on CPU as on GPU.
+
+# --- Configuration, evaluation & visualization (WP 5000) -------------------
+pyyaml>=6.0
+pandas>=2.0
+matplotlib>=3.7
+
+# --- Development -----------------------------------------------------------
+pytest>=7.0
