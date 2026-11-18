@@ -5,8 +5,10 @@ State space  (WP 2100): [q_BR (4), omega_BR_B / rate_scale (3), Omega / Omega_ma
                         q_BR is the error quaternion (scalar first) with q0 >= 0, i.e. the short rotation.
                         Basilisk works with MRPs; sigma_BR is converted here (same as RigidBodyKinematics.MRP2EP).
                         Optionally the last `stack_frames` observations are stacked.
-Action space (WP 2200): normalized RW motor torques a in [-1, 1]^N, u = a * u_max      (action.type: wheel_torque)
-                        or normalized body torque a in [-1, 1]^3, u = -pinv(Gs) a L_max (action.type: body_torque)
+Action space (WP 2200): normalized body control torque a in [-1, 1]^3, L = a * L_max   (action.type: body_torque,
+                        default, supervisor decision). The simulator splits L across the wheels with Basilisk's
+                        rwMotorTorque module.
+                        Option: normalized RW motor torques a in [-1, 1]^N, u = a * u_max (action.type: wheel_torque)
 Reward       (WP 2300): see rl_reorientation/envs/reward.py
 """
 
@@ -51,26 +53,25 @@ class ReorientationEnv(gym.Env):
         self.env_cfg = config["env"]
         self.unc_cfg = config["uncertainty"]
         sim_cfg = self.env_cfg["simulation"]
-        self.sim = sim or BasiliskReorientationSim(self.sc_cfg, sim_cfg["dt"], sim_cfg["integration_dt"])
+        self.action_type = self.env_cfg["action"]["type"]
+        self.sim = sim or BasiliskReorientationSim(self.sc_cfg, sim_cfg["dt"], sim_cfg["integration_dt"],
+                                                   control=self.action_type)
+        self.sim.control = self.action_type   # simulator interprets step(cmd) accordingly
         self.n_wheels = self.sim.n_wheels
         self.set_phase(phase or DEFAULT_PHASE)
 
         obs_cfg = self.env_cfg["observation"]
         if obs_cfg["attitude"] not in ATTITUDE_DIMS:
             raise ValueError(f"observation.attitude must be one of {list(ATTITUDE_DIMS)}")
-        act_cfg = self.env_cfg["action"]
-        self.action_type = act_cfg["type"]
-        if self.action_type == "wheel_torque":
-            self.action_dim = self.n_wheels
-        elif self.action_type == "body_torque":
-            # The controller only knows the nominal wheel geometry (true axes may be misaligned)
-            Gs = np.array(self.sc_cfg["reaction_wheels"]["spin_axes_B"], dtype=float).T
-            Gs /= np.linalg.norm(Gs, axis=0, keepdims=True)
-            self._Gs_pinv = np.linalg.pinv(Gs)
-            self._L_max = float(act_cfg.get("body_torque_max") or self.sim.u_max)
+        # Physical command = normalized action * action_scale
+        if self.action_type == "body_torque":
             self.action_dim = 3
+            self.action_scale = float(self.env_cfg["action"].get("body_torque_max") or self.sim.u_max)  # L_max
+        elif self.action_type == "wheel_torque":
+            self.action_dim = self.n_wheels
+            self.action_scale = self.sim.u_max
         else:
-            raise ValueError("action.type must be 'wheel_torque' or 'body_torque'")
+            raise ValueError("action.type must be 'body_torque' or 'wheel_torque'")
 
         self.stack_frames = int(obs_cfg.get("stack_frames", 1))
         frame_dim = ATTITUDE_DIMS[obs_cfg["attitude"]] + 3 * obs_cfg["include_rate"] \
@@ -120,7 +121,7 @@ class ReorientationEnv(gym.Env):
 
     def step(self, action):
         action = np.clip(np.asarray(action, dtype=float), -1.0, 1.0)
-        self.state = self.sim.step(self.wheel_torques(action))
+        self.state = self.sim.step(action * self.action_scale)
         self.steps += 1
 
         angle_deg = np.rad2deg(principal_angle(self.state.sigma_BR))
@@ -135,16 +136,6 @@ class ReorientationEnv(gym.Env):
         info = self._info()
         info["reward_terms"] = terms
         return self._observe(), reward, terminated, truncated, info
-
-    def wheel_torques(self, action):
-        """Normalized action -> RW motor torque command [N m] (WP 2200)."""
-        if self.action_type == "wheel_torque":
-            return action * self.sim.u_max
-        # Body torque L; the wheels act on the hub with -Gs u, so u = -pinv(Gs) L (minimum norm).
-        # If a wheel would saturate, all torques are scaled down together (keeps the torque direction).
-        u = -self._Gs_pinv @ (action * self._L_max)
-        peak = np.max(np.abs(u))
-        return u * (self.sim.u_max / peak) if peak > self.sim.u_max else u
 
     def _frame(self):
         """One normalized (and optionally noisy) observation frame."""

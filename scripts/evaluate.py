@@ -49,11 +49,8 @@ def main():
     if args.model:
         controllers[Path(args.model).stem] = sb3_controller(load_sb3_model(args.model))
     if args.pd:
-        if env.action_type != "wheel_torque":
-            parser.error("the PD baseline outputs wheel torques: set action.type to 'wheel_torque' in configs/env.yaml")
-        rw = config["spacecraft"]["reaction_wheels"]
-        gains = load_yaml("pd.yaml")
-        controllers["pd"] = pd_controller(PDController(gains["K"], gains["P"], rw["spin_axes_B"], rw["u_max"]))
+        gains = load_yaml("pd.yaml")   # same action interface as the agent (body torque -> rwMotorTorque)
+        controllers["pd"] = pd_controller(PDController.for_env(env, gains["K"], gains["P"]))
 
     out_dir = OUTPUT_DIR / "evaluation"
     out_dir.mkdir(parents=True, exist_ok=True)

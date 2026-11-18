@@ -170,8 +170,8 @@ Schaub & Junkins (Ch. 3) and Markley & Crassidis (Ch. 2–3) compare parameteriz
 | # | Finding | Decision | Where |
 |---|---|---|---|
 | 1 | Supervisor requires quaternions; $q$ / $-q$ ambiguity | state uses $q_{BR}$ with $q_0 \ge 0$ | WP 2100, `configs/env.yaml` |
-| 2 | Hidden inertia/disturbance makes the problem partially observable (Retagne 2024) | optional observation stacking (`stack_frames`); compare stacked and unstacked agents | WP 2100 |
-| 3 | Literature commands 3-axis torque; we have 4 redundant wheels | wheel torques as default (agent can use wheel redundancy); body torque + min-norm allocation as option | WP 2200 |
+| 2 | Hidden inertia/disturbance makes the problem partially observable (Retagne 2024) | observation stacking (`stack_frames`), with the previous action so the cause of each response is visible; supervisor: worth trying, choose k by a performance vs. training cost sweep | WP 2100, WP 4000 |
+| 3 | Literature commands 3-axis torque; we have 4 redundant wheels | 3-axis body torque as default, split across the wheels by Basilisk `rwMotorTorque` (supervisor decision); wheel torques kept as option | WP 2200, WP 3100 |
 | 4 | Shaped rewards get exploited, especially by PPO (Elkins 2022) | potential-based progress term (telescoping), no direction-dependent bonus | WP 2300 |
 | 5 | Goal bonus and early termination used in both papers | per-step bonus at rest in the 0.25° goal; termination with penalty on spin-up | WP 2300 |
 | 6 | RL agents don't output exactly zero torque (Retagne 2024) | effort penalty; goal requires low rate; evaluate steady-state error explicitly | WP 2300, WP 5400 |

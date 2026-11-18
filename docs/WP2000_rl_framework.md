@@ -57,9 +57,15 @@ $$
 | Error quaternion $q_{BR}$ (scalar first, $q_0 \ge 0$) | 4 | unit norm | attitude error relative to the target. The supervisor requires quaternions. Fixing $q_0 \ge 0$ removes the $q$/$-q$ ambiguity and always describes the short rotation |
 | Rate error $\omega_{BR}^B$ | 3 | ÷ $\omega_s$ = 0.1 rad/s | needed to brake; together with $q$ this is the full rigid-body state |
 | Wheel speeds $\Omega$ | N | ÷ $\Omega_{\max}$ | wheels have a speed limit (saturation). Stored wheel momentum also shapes the hub dynamics through the gyroscopic term |
-| Previous action $a_{t-1}$ | $n_a$ | already in [−1, 1] | lets the policy produce smooth torque profiles and react to its own last command |
+| Previous action $a_{t-1}$ | $n_a$ = 3 | already in [−1, 1] | see "Why the previous action" below |
 
-- With 4 wheels and wheel-torque actions, the frame has **15** inputs.
+- With body-torque actions and 4 wheels, the frame has **14** inputs (15 with the wheel-torque option).
+- **Why the previous action** (question from the supervisor). With a single frame and no actuator delay, it isn't
+  strictly needed for the Markov property. Its main purpose is to work with stacking: to infer the unknown inertia
+  from the response, the agent needs both the change in rate and the torque that caused it,
+  $\Delta\omega \approx J^{-1} L\,\Delta t$. Past states alone show only the effect. Secondary benefits: it supports
+  smooth torque profiles together with the effort penalty, and it covers any delay between command and applied
+  torque. Its value will be checked by training with and without it (`include_prev_action`).
 - Values are clipped to ±2 to match the declared observation space. Termination limits the rate before clipping matters.
 - **Conversion.** Basilisk provides the MRP error $\sigma_{BR}$ (shadow set, $|\sigma| \le 1$). The quaternion is
   $q_0 = \frac{1-\sigma^2}{1+\sigma^2},\; \mathbf q = \frac{2\sigma}{1+\sigma^2}$ (equivalent to
@@ -67,8 +73,11 @@ $$
   is $\varphi = 2\arccos q_0$.
 - **Markov property.** For a rigid body with reaction wheels, $(q, \omega, \Omega)$ is the complete dynamic state.
   The true inertia and the disturbance torque change each episode but aren't observed, which makes the problem
-  partially observable. Option: `stack_frames: k` feeds the last $k$ frames, so the agent can infer them from the
-  response (Retagne et al. 2024 used 5). The default is 1. Compare stacked and unstacked agents in WP 4000.
+  partially observable. `stack_frames: k` feeds the last $k$ frames, so the agent can infer them from the
+  response (Retagne et al. 2024 used 5). The supervisor considers this "definitely worth trying" and expects it to
+  beat the single-frame formulation. Larger $k$ means a bigger network input and more training time, so $k$ is
+  chosen by a sweep in WP 4000 (e.g. $k$ = 1, 3, 5, 10), comparing performance against training cost. The default
+  is 1 until then.
 - **Known limitation.** A unique short-rotation choice jumps at exactly $\varphi = 180°$, where both rotation
   directions are equally short. This holds for the quaternion with $q_0 \ge 0$ as well as for the MRP shadow set.
   It's a single attitude, so this is acceptable. A 6D (two DCM columns) representation would be the continuous
@@ -81,23 +90,28 @@ $$
 
 | Option | `action.type` | Action | Mapping to wheels |
 |---|---|---|---|
-| **A (default)** | `wheel_torque` | $a \in [-1,1]^N$ | $u = a \, u_{\max}$ |
-| B | `body_torque` | $a \in [-1,1]^3$ | $L = a\,L_{\max}$, $u = -G_s^{+} L$; scaled down together if any $\lvert u_i\rvert > u_{\max}$ |
+| **A (default)** | `body_torque` | $a \in [-1,1]^3$ | $L = a\,L_{\max}$; Basilisk `rwMotorTorque` computes $u$ with $-G_s u = L$ (minimum norm) |
+| B | `wheel_torque` | $a \in [-1,1]^N$ | $u = a \, u_{\max}$ |
 
-$G_s = [\hat g_1 \dots \hat g_N]$ holds the **nominal** spin axes. The wheels act on the hub with $-G_s u$.
+$G_s = [\hat g_1 \dots \hat g_N]$ holds the **nominal** spin axes. The wheels act on the hub with $-G_s u$. Each
+wheel torque is limited to $\pm u_{\max}$ by the reaction wheel model. $L_{\max}$ defaults to $u_{\max}$, which
+every axis can reach with the 4-wheel layout.
 
-| | A: wheel torques | B: body torque + allocation |
+| | A: body torque + allocation | B: wheel torques |
 |---|---|---|
-| Size | N (4) | 3 |
-| Literature | – | Retagne 2024 (`rwMotorTorque`), Elkins 2022, example code |
-| Wheel redundancy | agent can use the null space of $G_s$ (4 wheels, 3 axes) to manage wheel speeds and avoid saturation | fixed minimum-norm allocation, null space unused |
-| Learning difficulty | larger action space; agent must learn the allocation | smaller, directly physical |
-| Matches Basilisk interface | `ArrayMotorTorqueMsg` directly | same message after allocation |
-| Misalignment | learned implicitly | allocation uses nominal axes |
+| Size | 3 | N (4) |
+| Literature | Retagne 2024 (`rwMotorTorque`), Elkins 2022, example code | – |
+| Learning difficulty | smaller, directly physical action | larger action space; agent must also learn the allocation |
+| Wheel redundancy | fixed minimum-norm allocation, null space unused | agent could use the null space of $G_s$ to manage wheel speeds |
+| Basilisk | standard FSW chain: body torque → `rwMotorTorque` → wheels | `ArrayMotorTorqueMsg` directly |
+| PD comparison | PD outputs the same body torque through the same allocation, so the comparison is like for like | PD needs its own allocation |
 
-**Decision.** Option A is the default, because it uses all degrees of freedom of the 4-wheel configuration.
-Option B is implemented so the two can be compared in WP 4000, which the literature suggests. The PD baseline always
-runs with option A. `evaluate.py` refuses `--pd` with option B.
+**Decision (supervisor).** Option A: the agent outputs the 3-axis control torque, and the existing Basilisk module
+`rwMotorTorque` splits it across the wheels. The allocation lives in the simulator (WP 3100). The environment only
+scales the action. Interface: `sim.step(L)` with $L$ the desired body torque in N·m. Because Basilisk's
+`rwMotorTorque` expects the "required" torque $L_r = -L$, the sign must be verified in the Basilisk implementation
+(contract and test in `basilisk_sim.py` / `tests/test_env_pd.py`). Option B remains for comparison. The PD baseline
+uses the same action interface as the agent in both cases (`PDController.for_env`).
 
 The normalized range [−1, 1] matches SB3's squashed Gaussian policies (SAC uses tanh). Physical limits are applied
 by scaling, so the network never has to learn the torque magnitude scale.
@@ -135,7 +149,7 @@ criterion as the settling metric.
 - **The goal requires rest**, as the rest-to-rest scenario does. Otherwise the agent could pass through the target
   at speed and still collect the bonus.
 - **Magnitudes.** Total progress is at most 180 per episode. The goal bonus pays off as soon as the agent settles:
-  every step at rest adds 1.0. The time penalty and effort (≤ 0.04 per step with 4 wheels) are small compared with
+  every step at rest adds 1.0. The time penalty and effort (≤ 0.03 per step with 3 body-torque actions) are small compared with
   the progress per step during a slew (several tenths of a degree). The termination penalty is larger than any
   achievable progress, so spinning up never pays.
 - **Residual torque.** Retagne et al. found that RL agents never output exactly zero torque, so the spacecraft never
@@ -167,11 +181,12 @@ criterion as the settling metric.
 
 ## 7. Verification
 
-Unit tests (`pytest`, 25 tests, no Basilisk needed; a numpy rigid-body model stands in for the simulator):
+Unit tests (`pytest`, 29 tests, no Basilisk needed; a numpy rigid-body model stands in for the simulator):
 
 - Gymnasium API compliance for both action types and with frame stacking
 - Quaternion observation: unit norm, $q_0 \ge 0$, $2\arccos q_0$ equals the error angle
-- Body-torque allocation delivers the commanded hub torque; saturation scaling keeps its direction
+- Default action is the body torque (14 inputs); allocation delivers exactly the commanded hub torque with minimum norm (reference for `rwMotorTorque`); a positive body torque command increases the rate about that axis (sign contract for the Basilisk sim)
+- PD baseline converges with both action types through the same action interface as the agent
 - Goal bonus only at rest; progress term telescopes to zero for a back-and-forth slew; termination on spin-up
 - Inertia samples stay within ±10/20/30 % and are physically valid; periodic disturbance averages to the constant part
-- PD baseline converges with the nominal model (sign conventions consistent end to end)
+
