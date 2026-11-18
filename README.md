@@ -72,8 +72,8 @@ RL-Based-Reorientation-Control/
 
 | Element | Definition |
 |---|---|
-| **State** (WP 2100) | error quaternion `q_BR` (4, scalar first, `q0 ≥ 0`), rate error `ω_BR/ω_scale` (3), wheel speeds `Ω/Ω_max` (N), previous action (N); clipped to ±2; optional stacking of the last k observations |
-| **Action** (WP 2200) | normalized reaction wheel motor torques `a ∈ [-1, 1]^N`, applied torque `u = a · u_max` (option: 3-axis body torque with minimum-norm wheel allocation) |
+| **State** (WP 2100) | error quaternion `q_BR` (4, scalar first, `q0 ≥ 0`), rate error `ω_BR/ω_scale` (3), wheel speeds `Ω/Ω_max` (N), previous action (3): 14 values; clipped to ±2; optional stacking of the last k observations |
+| **Action** (WP 2200) | normalized 3-axis body control torque `a ∈ [-1, 1]^3`, `L = a · L_max`, split across the wheels by Basilisk `rwMotorTorque` (supervisor decision); option: direct wheel torques |
 | **Reward** (WP 2300) | `w_p (φ_prev − φ)` progress on principal error angle φ [deg] · `+bonus` per step at rest at the target (φ ≤ 0.25° **and** \|ω\| ≤ 0.01 rad/s), `−time penalty` otherwise · `−w_u Σ|a_i|` effort · optional rate and wheel saturation penalties |
 | **Termination** | episode ends with a one-time penalty if \|ω_BR\| exceeds `max_rate` (spacecraft spun up) |
 | **Episode** | large-angle **rest-to-rest**: random target attitude, random initial error from the curriculum phase, initial rate 0 |
