@@ -1,4 +1,4 @@
-"""Paths and YAML configuration loading."""
+"""Project paths and loading of the yaml config files"""
 
 from pathlib import Path
 
@@ -10,7 +10,7 @@ OUTPUT_DIR = PROJECT_ROOT / "outputs"
 
 
 def load_yaml(path):
-    """Load a YAML file. Relative paths are resolved against the configs/ directory."""
+    """Load a yaml file. A relative path like "env.yaml" is looked up in the configs folder"""
     path = Path(path)
     if not path.is_absolute() and not path.exists():
         path = CONFIG_DIR / path
@@ -19,7 +19,7 @@ def load_yaml(path):
 
 
 def load_project_config(spacecraft="spacecraft.yaml", env="env.yaml", uncertainty="uncertainty.yaml"):
-    """Load the spacecraft, environment and uncertainty configurations into one dict."""
+    """Load the spacecraft, environment and uncertainty configs into one dict"""
     return {
         "spacecraft": load_yaml(spacecraft),
         "env": load_yaml(env),

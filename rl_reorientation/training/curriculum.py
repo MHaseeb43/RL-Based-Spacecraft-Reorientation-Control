@@ -1,4 +1,4 @@
-"""Curriculum learning phases (WP 4100)."""
+"""Loads the curriculum (training phases, easy to hard) from a yaml file"""
 
 from rl_reorientation.config import load_yaml
 
@@ -6,7 +6,7 @@ REQUIRED_KEYS = ("name", "timesteps", "initial_angle_deg", "initial_rate_deg_s",
 
 
 def load_curriculum(path):
-    """Load and validate a curriculum file. Returns (name, list of phase dicts)."""
+    """Load a curriculum file and check that every phase is complete. Returns (name, list of phases)"""
     cur = load_yaml(path)
     phases = cur["phases"]
     for i, phase in enumerate(phases):
