@@ -34,7 +34,7 @@ def mrp_to_quat(mrp):
     return quat_normalize(np.array(rbk.MRP2EP(np.asarray(mrp, float))))
 
 def sample_moi(rng, inertia, moi_uncertainty=0.2, max_tries=1000):
-    """Samples disturbed inertia vector that is triangularly valid"""
+    """Samples disturbed inertia vector that is triangularly valid (-> makes sense physically)"""
     for _ in range(max_tries):
         inertia_dist = inertia * rng.uniform(1 - moi_uncertainty, 1 + moi_uncertainty, size=inertia.shape)
         a, b, c = inertia_dist
@@ -48,7 +48,7 @@ class SatelliteSim:
         """
         :param initial_att:  quaternion
         :param target_att:   quaternion
-        :param dist_torque_static:  external disturbance torque that is constantly applied to the satellite body [x,y,z,periodic?]
+        :param dist_torque_static:  external disturbance torque that is constantly applied to the satellite body [x,y,z]
         :param moi_uncertainty:  uncertainty of the moment of inertia
         """
         self.n_physics = int(round(simTimeStep / controlTimeStep))  # physics steps per control step
@@ -73,7 +73,7 @@ class SatelliteSim:
         self.satellite.ModelTag = "satellite"
         self.satellite.hub.mHub = 4.0  # mass of 4kg
         self.satellite.hub.r_BcB_B = [[0.0], [0.0], [0.0]]  # center of mass is at the body origin
-        self.satellite.hub.IHubPntBc_B = simHelpers.np2EigenMatrix3d(np.diag(inertia).flatten().tolist()) # inertia matrix of the hub, taken about the hub's center of mass (Bc), expressed in the body frame B
+        self.satellite.hub.IHubPntBc_B = simHelpers.np2EigenMatrix3d(np.diag(inertia)) # inertia matrix of the hub, taken about the hub's center of mass (Bc), expressed in the body frame B
         self.satellite.hub.sigma_BNInit = quat_to_mrp(initial_att)
         self.scSim.AddModelToTask(simTaskName, self.satellite, ModelPriority=1)
 
@@ -98,6 +98,7 @@ class SatelliteSim:
         self.scSim.AddModelToTask(simTaskName, self.rwStateEffector, ModelPriority=2)
 
         # message through which the agent sends the RW torque commands
+        # TODO: make the agents input cmd independent of RW wheel layout (by using basilisk module)
         self.cmdMsg = messaging.ArrayMotorTorqueMsg()
         self.rwStateEffector.rwMotorCmdInMsg.subscribeTo(self.cmdMsg)
 
@@ -130,44 +131,44 @@ class SatelliteSim:
         self._write_dist(dist_torque_static)
 
 
-        def _write_cmd(self, torques):
-            """Write the wheel motor torques (3 values x,y,z in Nm) into cmdMsg"""
-            payload = messaging.ArrayMotorTorqueMsgPayload()
-            # the message has room for many wheels. Only fill in the first three and zero the rest
-            payload.motorTorque = list(map(float, torques)) + [0.0] * (len(payload.motorTorque) - 3)
-            self.cmdMsg.write(payload)
+    def _write_cmd(self, torques):
+        """Write the wheel motor torques (3 values x,y,z in Nm) into cmdMsg"""
+        payload = messaging.ArrayMotorTorqueMsgPayload()
+        # the message has room for many wheels. Only fill in the first three and zero the rest
+        payload.motorTorque = list(map(float, torques)) + [0.0] * (len(payload.motorTorque) - 3)
+        self.cmdMsg.write(payload)
 
-        def _write_dist(self, disturbance):
-            """Write the disturbance torque (3 values x,y,z in Nm) into torqueMsg"""
-            payload = messaging.CmdTorqueBodyMsgPayload()
-            payload.torqueRequestBody = list(map(float, disturbance))
-            self.cmdMsg.write(payload)
-
-
-        def step(self, action):
-            """Advance the simulation by controlStepTime seconds.
-            action: 3 numbers (-> torques in x,y,z) in [-1, 1]; scaled by U_MAX to wheel motor torques [Nm].
-            Returns the new state (see get_state)."""
-            torques = np.clip(action, -1, 1) * U_MAX    # normalized action -> physical torque
-            for _ in range(self.n_physics):     # several small physics steps per control step
-                self._write_cmd(torques)
-                self.t += simTimeStep
-                self.scSim.ConfigureStopTime(macros.sec2nano(self.t))
-                self.scSim.ExecuteSimulation()
-            return self.get_state()
+    def _write_dist(self, disturbance):
+        """Write the disturbance torque (3 values x,y,z in Nm) into torqueMsg"""
+        payload = messaging.CmdTorqueBodyMsgPayload()
+        payload.torqueRequestBody = list(map(float, disturbance))
+        self.cmdMsg.write(payload)
 
 
-        def get_state(self):
-            """Read the current state from the simulation. Returns a dict:
-            t                   : simulated time
-            attitude            : attitude of the satellite (quaternion, w >= 0)
-            att_err             : attitude error of the satellite (quaternion, w >= 0; [1,0,0,0] means at the target)
-            angular_velocity    : angular velocity of the satellite [rad/s]
-            wheel_speeds        : speed of the 3 reaction wheels [rad/s]"""
-            state = self.satellite.scStateOutMsg.read() # true state of satellite without noise
-            att_mrp = rbk.MRPswitch(np.array(state.sigma_BN), 1.0)
-            angular_velocity = np.array(state.omega_BN_B)
-            att_err_mrp = rbk.MRPswitch(np.array(rbk.subMRP(att_mrp, self.targetAtt)), 1.0) # attitude error
-            wheel_speeds = np.array(self.rwStateEffector.rwSpeedOutMsg.read().wheelSpeeds)[:3]
-            return dict(t=self.t, attitude=mrp_to_quat(att_mrp),
-                        att_err=mrp_to_quat(att_err_mrp), angular_velocity=angular_velocity, wheel_speeds=wheel_speeds)
+    def step(self, action):
+        """Advance the simulation by controlStepTime seconds.
+        action: 3 numbers (-> torques in x,y,z) in [-1, 1]; scaled by U_MAX to wheel motor torques [Nm].
+        Returns the new state (see get_state)."""
+        torques = np.clip(action, -1, 1) * U_MAX    # normalized action -> physical torque
+        for _ in range(self.n_physics):     # several small physics steps per control step
+            self._write_cmd(torques)
+            self.t += simTimeStep
+            self.scSim.ConfigureStopTime(macros.sec2nano(self.t))
+            self.scSim.ExecuteSimulation()
+        return self.get_state()
+
+
+    def get_state(self):
+        """Read the current state from the simulation. Returns a dict:
+        t                   : simulated time
+        attitude            : attitude of the satellite (quaternion, w >= 0)
+        att_err             : attitude error of the satellite (quaternion, w >= 0; [1,0,0,0] means at the target)
+        angular_velocity    : angular velocity of the satellite [rad/s]
+        wheel_speeds        : speed of the 3 reaction wheels [rad/s]"""
+        state = self.satellite.scStateOutMsg.read() # true state of satellite without noise
+        att_mrp = rbk.MRPswitch(np.array(state.sigma_BN), 1.0)
+        angular_velocity = np.array(state.omega_BN_B)
+        att_err_mrp = rbk.MRPswitch(np.array(rbk.subMRP(att_mrp, self.targetAtt)), 1.0) # attitude error
+        wheel_speeds = np.array(self.rwStateEffector.rwSpeedOutMsg.read().wheelSpeeds)[:3]
+        return dict(t=self.t, attitude=mrp_to_quat(att_mrp),
+                    att_err=mrp_to_quat(att_err_mrp), angular_velocity=angular_velocity, wheel_speeds=wheel_speeds)
